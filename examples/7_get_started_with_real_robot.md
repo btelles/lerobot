@@ -82,10 +82,10 @@ You will need to unplug each motor in turn and run a command the identify the mo
 
 Do the Leader arm first, as all of its motors are of the same type. Plug in your first motor on your leader arm and run this script to set its ID to 1.
 ```bash
-python lerobot/scripts/configure_motor.py \
-  --port /dev/tty.usbmodem58760432961 \
+python3 lerobot/scripts/configure_motor.py \
+  --port /dev/ttyACM0 \
   --brand dynamixel \
-  --model xl330-m288 \
+  --model xl330-m077 \
   --baudrate 1000000 \
   --ID 1
 ```
@@ -155,7 +155,7 @@ from lerobot.common.robot_devices.motors.configs import DynamixelMotorsBusConfig
 from lerobot.common.robot_devices.motors.dynamixel import DynamixelMotorsBus
 
 leader_config = DynamixelMotorsBusConfig(
-    port="/dev/tty.usbmodem575E0031751",
+    port="/dev/ttyACM0",
     motors={
         # name: (index, model)
         "shoulder_pan": (1, "xl330-m077"),
@@ -168,7 +168,7 @@ leader_config = DynamixelMotorsBusConfig(
 )
 
 follower_config = DynamixelMotorsBusConfig(
-    port="/dev/tty.usbmodem575E0032081",
+    port="/dev/ttyACM1",
     motors={
         # name: (index, model)
         "shoulder_pan": (1, "xl430-w250"),
@@ -198,7 +198,7 @@ class KochRobotConfig(ManipulatorRobotConfig):
     leader_arms: dict[str, MotorsBusConfig] = field(
         default_factory=lambda: {
             "main": DynamixelMotorsBusConfig(
-                port="/dev/tty.usbmodem585A0085511", <-- UPDATE HERE
+                port="/dev/ttyACM0", # <-- UPDATE HERE
                 motors={
                     # name: (index, model)
                     "shoulder_pan": [1, "xl330-m077"],
@@ -215,7 +215,7 @@ class KochRobotConfig(ManipulatorRobotConfig):
     follower_arms: dict[str, MotorsBusConfig] = field(
         default_factory=lambda: {
             "main": DynamixelMotorsBusConfig(
-                port="/dev/tty.usbmodem585A0076891", <-- UPDATE HERE
+                port="/dev/ttyACM1", # <-- UPDATE HERE
                 motors={
                     # name: (index, model)
                     "shoulder_pan": [1, "xl430-w250"],
@@ -382,7 +382,7 @@ For the [Aloha bimanual robot](https://aloha-2.github.io), we would use `AlohaRo
 
 Next, you'll need to calibrate your Koch robot to ensure that the leader and follower arms have the same position values when they are in the same physical position. This calibration is essential because it allows a neural network trained on one Koch robot to work on another.
 
-When you connect your robot for the first time, the [`ManipulatorRobot`](../lerobot/common/robot_devices/robots/manipulator.py) will detect if the calibration file is missing and trigger the calibration procedure. During this process, you will be guided to move each arm to three different positions.
+When you connect your robot for the first time, the [`ManipulatorRobot`](../lerobot/common/robot_devices/robots/manipulator.py) will detect if the calibration file is missing and trigger the calibration procedure. During this process, you will be guided to move each arm to three different positions.robo
 
 Here are the positions you'll move the follower arm to:
 
@@ -463,11 +463,11 @@ You can easily teleoperate your robot by reading the positions from the leader a
 To teleoperate your robot for 30 seconds at a frequency of approximately 200Hz, run the following code:
 ```python
 import tqdm
-seconds = 30
+seconds = 3000
 frequency = 200
 for _ in tqdm.tqdm(range(seconds*frequency)):
-    leader_pos = robot.leader_arms["main"].read("Present_Position")
-    robot.follower_arms["main"].write("Goal_Position", leader_pos)
+    leader_pos = r.leader_arms["main"].read("Present_Position")
+    r.follower_arms["main"].write("Goal_Position", leader_pos)
 ```
 
 *Using `teleop_step` for Teleoperation*
