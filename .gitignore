@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Dev scripts
+.dev
+
 # Logging
 logs
 tmp
@@ -78,7 +81,7 @@ pip-log.txt
 pip-delete-this-directory.txt
 
 # Unit test / coverage reports
-!tests/data
+!tests/artifacts
 htmlcov/
 .tox/
 .nox/
@@ -91,10 +94,8 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 
-# Ignore .cache except calibration
+# Ignore .cache
 .cache/*
-!.cache/calibration/
-!.cache/calibration/**
 
 # Translations
 *.mo

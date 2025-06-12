@@ -38,6 +38,7 @@ from lerobot.common.datasets.utils import (
     DEFAULT_IMAGE_PATH,
     INFO_PATH,
     TASKS_PATH,
+    _validate_feature_names,
     append_jsonlines,
     backward_compatible_episodes_stats,
     check_delta_timestamps,
@@ -48,7 +49,6 @@ from lerobot.common.datasets.utils import (
     embed_images,
     get_delta_indices,
     get_episode_data_index,
-    get_features_from_robot,
     get_hf_features_from_features,
     get_safe_version,
     hf_transform_to_torch,
@@ -67,11 +67,11 @@ from lerobot.common.datasets.utils import (
 )
 from lerobot.common.datasets.video_utils import (
     VideoFrame,
-    decode_video_frames_torchvision,
+    decode_video_frames,
     encode_video_frames,
+    get_safe_default_codec,
     get_video_info,
 )
-from lerobot.common.robot_devices.robots.utils import Robot
 
 CODEBASE_VERSION = "v2.1"
 
@@ -303,10 +303,9 @@ class LeRobotDatasetMetadata:
         cls,
         repo_id: str,
         fps: int,
-        root: str | Path | None = None,
-        robot: Robot | None = None,
+        features: dict,
         robot_type: str | None = None,
-        features: dict | None = None,
+        root: str | Path | None = None,
         use_videos: bool = True,
     ) -> "LeRobotDatasetMetadata":
         """Creates metadata for a LeRobotDataset."""
@@ -316,33 +315,13 @@ class LeRobotDatasetMetadata:
 
         obj.root.mkdir(parents=True, exist_ok=False)
 
-        if robot is not None:
-            features = get_features_from_robot(robot, use_videos)
-            robot_type = robot.robot_type
-            if not all(cam.fps == fps for cam in robot.cameras.values()):
-                logging.warning(
-                    f"Some cameras in your {robot.robot_type} robot don't have an fps matching the fps of your dataset."
-                    "In this case, frames from lower fps cameras will be repeated to fill in the blanks."
-                )
-        elif features is None:
-            raise ValueError(
-                "Dataset features must either come from a Robot or explicitly passed upon creation."
-            )
-        else:
-            # TODO(aliberts, rcadene): implement sanity check for features
-            features = {**features, **DEFAULT_FEATURES}
-
-            # check if none of the features contains a "/" in their names,
-            # as this would break the dict flattening in the stats computation, which uses '/' as separator
-            for key in features:
-                if "/" in key:
-                    raise ValueError(f"Feature names should not contain '/'. Found '/' in feature '{key}'.")
-
-            features = {**features, **DEFAULT_FEATURES}
+        # TODO(aliberts, rcadene): implement sanity check for features
+        features = {**features, **DEFAULT_FEATURES}
+        _validate_feature_names(features)
 
         obj.tasks, obj.task_to_task_index = {}, {}
         obj.episodes_stats, obj.stats, obj.episodes = {}, {}, {}
-        obj.info = create_empty_dataset_info(CODEBASE_VERSION, fps, robot_type, features, use_videos)
+        obj.info = create_empty_dataset_info(CODEBASE_VERSION, fps, features, use_videos, robot_type)
         if len(obj.video_keys) > 0 and not use_videos:
             raise ValueError()
         write_json(obj.info, obj.root / INFO_PATH)
@@ -462,8 +441,8 @@ class LeRobotDataset(torch.utils.data.Dataset):
             download_videos (bool, optional): Flag to download the videos. Note that when set to True but the
                 video files are already present on local disk, they won't be downloaded again. Defaults to
                 True.
-            video_backend (str | None, optional): Video backend to use for decoding videos. There is currently
-                a single option which is the pyav decoder used by Torchvision. Defaults to pyav.
+            video_backend (str | None, optional): Video backend to use for decoding videos. Defaults to torchcodec when available int the platform; otherwise, defaults to 'pyav'.
+                You can also use the 'pyav' decoder used by Torchvision, which used to be the default option, or 'video_reader' which is another decoder of Torchvision.
         """
         super().__init__()
         self.repo_id = repo_id
@@ -473,7 +452,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         self.episodes = episodes
         self.tolerance_s = tolerance_s
         self.revision = revision if revision else CODEBASE_VERSION
-        self.video_backend = video_backend if video_backend else "pyav"
+        self.video_backend = video_backend if video_backend else get_safe_default_codec()
         self.delta_indices = None
 
         # Unused attributes
@@ -707,9 +686,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         item = {}
         for vid_key, query_ts in query_timestamps.items():
             video_path = self.root / self.meta.get_video_file_path(ep_idx, vid_key)
-            frames = decode_video_frames_torchvision(
-                video_path, query_ts, self.tolerance_s, self.video_backend
-            )
+            frames = decode_video_frames(video_path, query_ts, self.tolerance_s, self.video_backend)
             item[vid_key] = frames.squeeze(0)
 
         return item
@@ -786,7 +763,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         else:
             self.image_writer.save_image(image=image, fpath=fpath)
 
-    def add_frame(self, frame: dict) -> None:
+    def add_frame(self, frame: dict, task: str, timestamp: float | None = None) -> None:
         """
         This function only adds the frame to the episode_buffer. Apart from images — which are written in a
         temporary directory — nothing is written to disk. To save those frames, the 'save_episode()' method
@@ -804,17 +781,14 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
         # Automatically add frame_index and timestamp to episode buffer
         frame_index = self.episode_buffer["size"]
-        timestamp = frame.pop("timestamp") if "timestamp" in frame else frame_index / self.fps
+        if timestamp is None:
+            timestamp = frame_index / self.fps
         self.episode_buffer["frame_index"].append(frame_index)
         self.episode_buffer["timestamp"].append(timestamp)
+        self.episode_buffer["task"].append(task)
 
         # Add frame features to episode_buffer
         for key in frame:
-            if key == "task":
-                # Note: we associate the task in natural language to its task index during `save_episode`
-                self.episode_buffer["task"].append(frame["task"])
-                continue
-
             if key not in self.features:
                 raise ValueError(
                     f"An element of the frame is not in the features. '{key}' not in '{self.features.keys()}'."
@@ -945,7 +919,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
     def stop_image_writer(self) -> None:
         """
         Whenever wrapping this dataset inside a parallelized DataLoader, this needs to be called first to
-        remove the image_writer in order for the LeRobotDataset object to be pickleable and parallelized.
+        remove the image_writer in order for the LeRobotDataset object to be picklable and parallelized.
         """
         if self.image_writer is not None:
             self.image_writer.stop()
@@ -990,10 +964,9 @@ class LeRobotDataset(torch.utils.data.Dataset):
         cls,
         repo_id: str,
         fps: int,
+        features: dict,
         root: str | Path | None = None,
-        robot: Robot | None = None,
         robot_type: str | None = None,
-        features: dict | None = None,
         use_videos: bool = True,
         tolerance_s: float = 1e-4,
         image_writer_processes: int = 0,
@@ -1005,10 +978,9 @@ class LeRobotDataset(torch.utils.data.Dataset):
         obj.meta = LeRobotDatasetMetadata.create(
             repo_id=repo_id,
             fps=fps,
-            root=root,
-            robot=robot,
             robot_type=robot_type,
             features=features,
+            root=root,
             use_videos=use_videos,
         )
         obj.repo_id = obj.meta.repo_id
@@ -1029,7 +1001,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         obj.delta_timestamps = None
         obj.delta_indices = None
         obj.episode_data_index = None
-        obj.video_backend = video_backend if video_backend is not None else "pyav"
+        obj.video_backend = video_backend if video_backend is not None else get_safe_default_codec()
         return obj
 
 
@@ -1054,7 +1026,7 @@ class MultiLeRobotDataset(torch.utils.data.Dataset):
         super().__init__()
         self.repo_ids = repo_ids
         self.root = Path(root) if root else HF_LEROBOT_HOME
-        self.tolerances_s = tolerances_s if tolerances_s else {repo_id: 1e-4 for repo_id in repo_ids}
+        self.tolerances_s = tolerances_s if tolerances_s else dict.fromkeys(repo_ids, 0.0001)
         # Construct the underlying datasets passing everything but `transform` and `delta_timestamps` which
         # are handled by this class.
         self._datasets = [

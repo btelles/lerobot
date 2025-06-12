@@ -25,7 +25,9 @@ from lerobot.common.envs.utils import env_to_policy_features
 from lerobot.common.policies.act.configuration_act import ACTConfig
 from lerobot.common.policies.diffusion.configuration_diffusion import DiffusionConfig
 from lerobot.common.policies.pi0.configuration_pi0 import PI0Config
+from lerobot.common.policies.pi0fast.configuration_pi0fast import PI0FASTConfig
 from lerobot.common.policies.pretrained import PreTrainedPolicy
+from lerobot.common.policies.smolvla.configuration_smolvla import SmolVLAConfig
 from lerobot.common.policies.tdmpc.configuration_tdmpc import TDMPCConfig
 from lerobot.common.policies.vqbet.configuration_vqbet import VQBeTConfig
 from lerobot.configs.policies import PreTrainedConfig
@@ -54,6 +56,14 @@ def get_policy_class(name: str) -> PreTrainedPolicy:
         from lerobot.common.policies.pi0.modeling_pi0 import PI0Policy
 
         return PI0Policy
+    elif name == "pi0fast":
+        from lerobot.common.policies.pi0fast.modeling_pi0fast import PI0FASTPolicy
+
+        return PI0FASTPolicy
+    elif name == "smolvla":
+        from lerobot.common.policies.smolvla.modeling_smolvla import SmolVLAPolicy
+
+        return SmolVLAPolicy
     else:
         raise NotImplementedError(f"Policy with name {name} is not implemented.")
 
@@ -69,6 +79,10 @@ def make_policy_config(policy_type: str, **kwargs) -> PreTrainedConfig:
         return VQBeTConfig(**kwargs)
     elif policy_type == "pi0":
         return PI0Config(**kwargs)
+    elif policy_type == "pi0fast":
+        return PI0FASTConfig(**kwargs)
+    elif policy_type == "smolvla":
+        return SmolVLAConfig(**kwargs)
     else:
         raise ValueError(f"Policy type '{policy_type}' is not available.")
 
