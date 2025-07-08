@@ -16,10 +16,11 @@
 # https://github.com/huggingface/peft/blob/main/.github/workflows/nightly.yml
 name: Nightly
 
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: "0 2 * * *"
+# Disable for btelles repository.
+#on:
+#  workflow_dispatch:
+#  schedule:
+#    - cron: "0 2 * * *"
 
 permissions: {}
 
