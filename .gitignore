@@ -58,7 +58,10 @@ lib64/
 parts/
 sdist/
 var/
+.venv/
 wheels/
+Python-3.10.16/
+Python-3.10.16*
 pip-wheel-metadata/
 share/python-wheels/
 *.egg-info/
