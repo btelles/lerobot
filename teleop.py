@@ -1,9 +1,8 @@
 import sys
 import signal
-from lerobot.common.robot_devices.motors.configs import DynamixelMotorsBusConfig
-from lerobot.common.robot_devices.motors.dynamixel import DynamixelMotorsBus, TorqueMode
-from lerobot.common.robot_devices.robots.configs import KochRobotConfig
-from lerobot.common.robot_devices.robots.manipulator import ManipulatorRobot
+from lerobot.configs import DynamixelMotorsBusConfig, ManipulatorRobotConfig
+from lerobot.motors.dynamixel import DynamixelMotorsBus, TorqueMode
+from lerobot.configs import KochRobotConfig
 import tqdm
 
 def config_btelles():
@@ -38,7 +37,7 @@ def config_btelles():
         follower_arms={"main": follower_config},
         cameras={},  # We don't use any camera for now
     )
-    robot = ManipulatorRobot(robot_config)
+    robot = ManipulatorRobotConfig(robot_config)
     robot.connect()
 
     return (robot, leader_config, follower_config)
