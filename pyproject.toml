@@ -291,6 +291,14 @@ module = "lerobot.envs.*"
 # Enable type checking only for the envs module
 ignore_errors = false
 
+[tool.uv.sources]
+lerobot = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "lerobot[all]",
+]
+
 
 # [[tool.mypy.overrides]]
 # module = "lerobot.utils.*"
